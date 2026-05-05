@@ -1,0 +1,42 @@
+.DS_Store
+**/.DS_Store
+
+# macOS / Xcode
+DerivedData/
+BuildDerivedData/
+*.xcuserdatad/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+# Swift / local builds
+.build/
+build/
+
+# Arduino / PlatformIO
+.pio/
+*.elf
+*.bin
+*.hex
+*.map
+
+# Python tools
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Node / web tooling
+node_modules/
+dist/
+.vite/
+
+# Local editor
+.vscode/
+.idea/
+*.swp
+*.tmp

@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>仪表盘编辑器</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg-a: #ffffff;
+      --bg-b: #f4f4f4;
+      --ink: #111111;
+      --panel: rgba(255, 255, 255, 0.96);
+      --panel-border: rgba(0, 0, 0, 0.1);
+      --card: rgba(255, 255, 255, 0.98);
+      --card-strong: #ffffff;
+      --line: rgba(0, 0, 0, 0.12);
+      --accent: #111111;
+      --accent-soft: rgba(0, 0, 0, 0.08);
+      --accent-strong: #111111;
+      --teal: #111111;
+      --grid: rgba(0, 0, 0, 0.06);
+      --shadow: 0 20px 50px rgba(0, 0, 0, 0.08);
+      --radius: 22px;
+      --radius-sm: 14px;
+      --mono: "SFMono-Regular", "Menlo", "Monaco", monospace;
+      --sans: "Avenir Next", "DIN Alternate", "Helvetica Neue", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: var(--sans);
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(0, 0, 0, 0.03), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(0, 0, 0, 0.04), transparent 36%),
+        linear-gradient(135deg, var(--bg-a), var(--bg-b));
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent);
+      opacity: 0.5;
+    }
+
+    .shell {
+      position: relative;
+      z-index: 1;
+      height: 100vh;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(26px, 3vw, 36px);
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.42;
+      cursor: default;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      color: white;
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+    }
+
+    .btn-secondary {
+      background: white;
+      color: var(--ink);
+      border: 1px solid rgba(0, 0, 0, 0.12);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .panel {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      height: 100%;
+      overflow: auto;
+      border-radius: 28px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      color: rgba(0, 0, 0, 0.94);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .panel-card {
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(0, 0, 0, 0.02);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    .panel-card h2,
+    .panel-card h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: rgba(0, 0, 0, 0.7);
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .field {
+      display: grid;
+      gap: 4px;
+    }
+
+    .field-inline {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .field-inline > label:first-of-type {
+      grid-column: 1 / -1;
+    }
+
+    .field-inline > input,
+    .field-inline > select {
+      grid-column: 1;
+    }
+
+    .field-inline > .inline-check {
+      grid-column: 2;
+      align-self: end;
+      margin-bottom: 10px;
+      padding-top: 0;
+      min-height: 0;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: rgba(0, 0, 0, 0.7);
+      text-transform: uppercase;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      border-radius: 12px;
+      padding: 9px 11px;
+      background: white;
+      color: black;
+      font: inherit;
+    }
+
+    input[type="range"] {
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .hint {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: rgba(0, 0, 0, 0.6);
+    }
+
+    .workspace {
+      display: grid;
+      min-height: 0;
+    }
+
+    .preview-card {
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.98);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow: var(--shadow);
+      overflow: visible;
+      backdrop-filter: blur(12px);
+      height: 100%;
+      min-height: 0;
+    }
+
+    .preview-stage {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 0;
+      overflow: visible;
+      padding: 18px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(252, 252, 252, 1)),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+        linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+      background-size: auto, 24px 24px, 24px 24px;
+    }
+
+    .preview-wrap {
+      display: grid;
+      place-items: center;
+      min-height: 0;
+      height: 100%;
+      padding: 14px;
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at top, rgba(0, 0, 0, 0.03), transparent 52%),
+        linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(255, 255, 255, 1));
+      border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    .preview-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .speed-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 4px 0 0;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      padding: 0;
+      border-radius: 14px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      background: rgba(255, 255, 255, 0.94);
+      color: #111111;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+    }
+
+    .icon-btn svg {
+      width: 20px;
+      height: 20px;
+      display: block;
+    }
+
+    .icon-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .icon-btn.active {
+      background: #111111;
+      color: white;
+      border-color: #111111;
+    }
+
+    .toolbar-menu-wrap {
+      position: relative;
+    }
+
+    .toolbar-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      min-width: 132px;
+      padding: 8px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.98);
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12);
+      display: grid;
+      gap: 6px;
+      z-index: 6;
+    }
+
+    .toolbar-menu.hidden {
+      display: none;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .toolbar-menu button {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.04);
+      color: #111111;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: none;
+    }
+
+    #preview-svg {
+      width: min(100%, 900px);
+      height: auto;
+      overflow: visible;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .floating-editor {
+      position: absolute;
+      top: 76px;
+      right: 22px;
+      z-index: 3;
+      width: min(360px, calc(100% - 20px));
+      padding: 16px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+      backdrop-filter: blur(10px);
+    }
+
+    .floating-editor.hidden {
+      display: none;
+    }
+
+    .floating-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .floating-head strong {
+      font-size: 15px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .floating-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .inline-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 40px;
+      padding-top: 22px;
+      font-size: 12px;
+      color: rgba(0, 0, 0, 0.7);
+      white-space: nowrap;
+    }
+
+    .inline-check.compact {
+      padding-top: 0;
+      min-height: 0;
+    }
+
+    .mini-btn {
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.06);
+      color: black;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: none;
+    }
+
+    .mini-btn.warn {
+      background: rgba(0, 0, 0, 0.08);
+      color: black;
+    }
+
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      border-radius: 4px;
+      accent-color: #111111;
+    }
+
+    @media (max-width: 1120px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .panel {
+        height: auto;
+        max-height: 42vh;
+      }
+
+      .topbar {
+        flex-direction: column;
+      }
+
+      .actions {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        padding: 16px;
+      }
+
+      .field-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .preview-stage,
+      .card-head {
+        padding: 16px;
+      }
+
+      .preview-wrap {
+        min-height: 320px;
+        padding: 10px;
+      }
+
+      .floating-editor {
+        top: 68px;
+        right: 16px;
+        left: 16px;
+        width: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="hero">
+        <h1>仪表盘编辑器</h1>
+      </div>
+            <div class="actions">
+        <button class="btn-secondary" id="undo-action" type="button" disabled>撤销</button>
+        <button class="btn-secondary" id="redo-action" type="button" disabled>重做</button>
+        <button class="btn-secondary" id="reset-defaults">恢复默认</button>
+        <button class="btn-secondary" id="import-settings">导入设置</button>
+        <button class="btn-secondary" id="export-settings">导出设置</button>
+        <button class="btn-secondary" id="download-png">下载PNG</button>
+        <button class="btn-primary" id="download-svg">下载SVG</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="panel">
+        <section class="panel-card">
+          <h2>仪表盘尺寸</h2>
+          <div class="field-grid">
+            <div class="field">
+              <label for="widthMm">宽度 mm</label>
+              <input id="widthMm" type="number" min="1" step="0.1">
+            </div>
+            <div class="field">
+              <label for="heightMm">高度 mm</label>
+              <input id="heightMm" type="number" min="1" step="0.1">
+            </div>
+            <div class="field">
+              <label for="centerX">圆心 X mm</label>
+              <input id="centerX" type="number" step="0.1">
+            </div>
+            <div class="field">
+              <label for="centerY">圆心 Y mm</label>
+              <input id="centerY" type="number" step="0.1">
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-card">
+          <h2>圆弧与刻度</h2>
+          <div class="field-grid">
+            <div class="field">
+              <label for="arcStartDeg">起始角度</label>
+              <input id="arcStartDeg" type="number" step="1">
+            </div>
+            <div class="field">
+              <label for="arcEndDeg">结束角度</label>
+              <input id="arcEndDeg" type="number" step="1">
+            </div>
+            <div class="field">
+              <label for="arcRadiusMm">圆弧半径 mm</label>
+              <input id="arcRadiusMm" type="number" min="0.1" step="0.1">
+            </div>
+            <div class="field">
+              <label for="arcStrokeWidthMm">圆弧线宽 mm</label>
+              <input id="arcStrokeWidthMm" type="number" min="0" step="0.05">
+            </div>
+            <div class="field">
+              <label for="majorTickLengthMm">大刻度长度 mm</label>
+              <input id="majorTickLengthMm" type="number" min="0" step="0.1">
+            </div>
+            <div class="field">
+              <label for="minorTickLengthMm">小刻度长度 mm</label>
+              <input id="minorTickLengthMm" type="number" min="0" step="0.1">
+            </div>
+            <div class="field">
+              <label for="majorTickWidthMm">大刻度线宽 mm</label>
+              <input id="majorTickWidthMm" type="number" min="0" step="0.05">
+            </div>
+            <div class="field">
+              <label for="minorTickWidthMm">小刻度线宽 mm</label>
+              <input id="minorTickWidthMm" type="number" min="0" step="0.05">
+            </div>
+            <div class="field">
+              <label for="needleLengthMm">指针长度 mm</label>
+              <input id="needleLengthMm" type="number" min="0" step="0.1">
+            </div>
+            <div class="field">
+              <label for="needleWidthMm">指针宽度 mm</label>
+              <input id="needleWidthMm" type="number" min="0" step="0.05">
+            </div>
+            <div class="field full">
+              <label class="inline-check" for="showNeedle"><input id="showNeedle" type="checkbox" checked>显示指针</label>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <section class="preview-card">
+          <div class="preview-stage">
+            <div class="preview-toolbar">
+              <div class="speed-chip" id="speed-metric">0 MB/s</div>
+              <button class="icon-btn active" id="snap-toggle" type="button" aria-pressed="true" title="磁铁吸附已开启" aria-label="磁铁吸附">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 4v7a5 5 0 0 0 10 0V4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                  <path d="M7 4h3.2v4H7zM13.8 4H17v4h-3.2z" fill="currentColor"/>
+                </svg>
+              </button>
+              <div class="toolbar-menu-wrap">
+                <button class="icon-btn" id="add-menu-toggle" type="button" aria-label="新增" title="新增">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <div class="toolbar-menu hidden" id="add-menu">
+                  <button id="add-major-tick" type="button">新增刻度</button>
+                  <button id="add-free-text" type="button">新增文字</button>
+                </div>
+              </div>
+            </div>
+            <div class="floating-editor hidden" id="inline-editor">
+              <div class="floating-head">
+                <strong id="inline-editor-title">刻度属性</strong>
+                <button class="mini-btn" id="close-inline-editor" type="button">关闭</button>
+              </div>
+              <div class="field-grid" id="tick-editor-fields">
+                <div class="field full field-inline">
+                  <label for="tickValueText">内容</label>
+                  <input id="tickValueText" type="text">
+                  <label class="inline-check compact" for="tickShowValue"><input id="tickShowValue" type="checkbox" checked>显示</label>
+                </div>
+                <div class="field field-inline">
+                  <label for="tickUnitText">单位</label>
+                  <select id="tickUnitText">
+                    <option value="K">K</option>
+                    <option value="M">M</option>
+                    <option value="G">G</option>
+                  </select>
+                  <label class="inline-check compact" for="tickShowUnit"><input id="tickShowUnit" type="checkbox" checked>显示</label>
+                </div>
+                <div class="field">
+                  <label for="tickPercent">百分比 %</label>
+                  <input id="tickPercent" type="number" min="0" max="100" step="1">
+                </div>
+                <div class="field">
+                  <label for="tickSubdivisions">细分刻度数</label>
+                  <input id="tickSubdivisions" type="number" min="1" step="1">
+                </div>
+                <div class="field field-inline">
+                  <label for="tickFontSizeMm">字号 mm</label>
+                  <input id="tickFontSizeMm" type="number" min="0.1" step="0.1">
+                  <label class="inline-check" for="tickSyncFontSize"><input id="tickSyncFontSize" type="checkbox">同步</label>
+                </div>
+                <div class="field full field-inline">
+                  <label for="tickFontFamily">字体</label>
+                  <select id="tickFontFamily">
+                    <option value="Source Han Sans CN Medium, Noto Sans CJK SC, sans-serif">思源黑体 CN</option>
+                  </select>
+                  <label class="inline-check" for="tickSyncFontFamily"><input id="tickSyncFontFamily" type="checkbox">同步</label>
+                </div>
+              </div>
+              <div class="field-grid hidden" id="free-text-editor-fields">
+                <div class="field full">
+                  <label for="freeTextContent">文字</label>
+                  <input id="freeTextContent" type="text">
+                </div>
+                <div class="field">
+                  <label for="freeTextFontSizeMm">字号 mm</label>
+                  <input id="freeTextFontSizeMm" type="number" min="0.1" step="0.1">
+                </div>
+                <div class="field full">
+                  <label for="freeTextFontFamily">字体</label>
+                  <select id="freeTextFontFamily">
+                    <option value="Source Han Sans CN Medium, Noto Sans CJK SC, sans-serif">思源黑体 CN</option>
+                  </select>
+                </div>
+              </div>
+              <div class="floating-actions">
+                <button class="mini-btn warn" id="inline-delete-item" type="button">删除</button>
+              </div>
+            </div>
+            <div class="preview-wrap">
+              <svg id="preview-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+          </div>
+        </section>
+      </section>
+    </div>
+  </div>
+
+  <input id="import-settings-file" type="file" accept="application/json,.json" class="hidden">
+  <script src="./font-data.js"></script>
+  <script src="./opentype.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
