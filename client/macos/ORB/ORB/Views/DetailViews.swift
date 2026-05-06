@@ -285,7 +285,7 @@ struct UnknownDeviceResetView: View {
     let resetAction: () -> Void
 
     var body: some View {
-        DetailPanel(title: "发现新设备") {
+        UnknownDevicePanel {
             VStack(alignment: .leading, spacing: 18) {
                 Text("该设备已绑定其它主机，是否重置？")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
@@ -299,18 +299,28 @@ struct UnknownDeviceResetView: View {
                 }
 
                 HStack(spacing: 12) {
-                    Button("重置") {
+                    Button {
                         resetAction()
+                    } label: {
+                        Image(systemName: isResetting ? "hourglass" : "checkmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .frame(width: 30, height: 30)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.red)
                     .disabled(isResetting)
+                    .help("确认")
 
-                    Button("取消") {
+                    Button {
                         cancelAction()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .frame(width: 30, height: 30)
                     }
                     .buttonStyle(.bordered)
                     .disabled(isResetting)
+                    .help("取消")
                 }
             }
         }
@@ -318,54 +328,41 @@ struct UnknownDeviceResetView: View {
 }
 
 struct UnknownDeviceRegistrationView: View {
-    let addressLabel: String
     @Binding var moduleType: ModuleType
     @Binding var moduleID: Int?
     let validIDs: [Int]
-    let registrationTargetLabel: (Int) -> String
     let noticeText: String?
     let issueText: String?
     let isRegistering: Bool
     let cancelAction: () -> Void
     let registerAction: () -> Void
+    @State private var hoveredModuleType: ModuleType?
 
     var body: some View {
-        DetailPanel(title: "发现新设备") {
+        UnknownDevicePanel {
             VStack(alignment: .leading, spacing: 18) {
-                Text("检测到一个地址为 \(addressLabel) 的新设备。请选择它的模块类型，并为它分配新的槽位。")
-                    .foregroundStyle(.secondary)
+                Text("你连接了什么模块？")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("模块类型")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                    Picker("模块类型", selection: $moduleType) {
-                        ForEach(ModuleType.registrationOptions, id: \.self) { option in
-                            Text(option.registrationLabel).tag(option)
+                HStack(spacing: 18) {
+                    ForEach(ModuleType.registrationOptions, id: \.self) { option in
+                        UnknownModuleTypeChoice(
+                            moduleType: option,
+                            isSelected: moduleType == option,
+                            isHovered: hoveredModuleType == option
+                        ) {
+                            moduleType = option
+                        }
+                        .onHover { hovering in
+                            hoveredModuleType = hovering ? option : nil
                         }
                     }
-                    .pickerStyle(.segmented)
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("目标槽位")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                    if validIDs.isEmpty {
-                        Text("当前没有可分配的槽位。")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Picker(
-                            "目标槽位",
-                            selection: Binding(
-                                get: { moduleID ?? validIDs.first ?? 0 },
-                                set: { moduleID = $0 }
-                            )
-                        ) {
-                            ForEach(validIDs, id: \.self) { id in
-                                Text(registrationTargetLabel(id)).tag(id)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    }
+                if validIDs.isEmpty {
+                    Text("当前没有可分配的槽位。")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
                 }
 
                 if let noticeText {
@@ -381,21 +378,160 @@ struct UnknownDeviceRegistrationView: View {
                 }
 
                 HStack(spacing: 12) {
-                    Button(isRegistering ? "正在分配..." : "确认分配") {
+                    Button {
                         registerAction()
+                    } label: {
+                        Image(systemName: isRegistering ? "hourglass" : "checkmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .frame(width: 30, height: 30)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Color(red: 0.67, green: 0.37, blue: 0.18))
                     .disabled(isRegistering || validIDs.isEmpty)
+                    .help("确认")
 
-                    Button("取消") {
+                    Button {
                         cancelAction()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .frame(width: 30, height: 30)
                     }
                     .buttonStyle(.bordered)
                     .disabled(isRegistering)
+                    .help("取消")
                 }
             }
+            .onAppear {
+                moduleID = moduleID ?? validIDs.first
+            }
+            .onChange(of: validIDs) { _, ids in
+                if let current = moduleID, ids.contains(current) {
+                    return
+                }
+                moduleID = ids.first
+            }
         }
+    }
+}
+
+private struct UnknownModuleTypeChoice: View {
+    let moduleType: ModuleType
+    let isSelected: Bool
+    let isHovered: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.04))
+                        .frame(width: 118, height: 118)
+                    Circle()
+                        .stroke(Color.white.opacity(isSelected || isHovered ? 0.92 : 0.18), lineWidth: isSelected ? 3 : 2)
+                        .frame(width: 118, height: 118)
+
+                    if moduleType == .balance {
+                        BalanceChoiceGraphic()
+                            .frame(width: 94, height: 94)
+                            .grayscale(isSelected ? 0 : 1)
+                            .opacity(isSelected ? 1 : 0.42)
+                    } else {
+                        UnknownModuleTypeImage(name: imageName)
+                            .frame(width: 94, height: 94)
+                            .grayscale(isSelected ? 0 : 1)
+                            .opacity(isSelected ? 1 : 0.42)
+                    }
+                }
+
+                Text(moduleType.displayName)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(moduleType.displayName)
+    }
+
+    private var imageName: String {
+        switch moduleType {
+        case .radiance:
+            return "radiance"
+        case .balance, .unknown:
+            return "balance"
+        }
+    }
+}
+
+private struct BalanceChoiceGraphic: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white)
+                .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
+
+            Circle()
+                .stroke(Color.black.opacity(0.12), lineWidth: 1)
+
+            Capsule()
+                .fill(Color.red)
+                .frame(width: 5, height: 45)
+                .offset(y: -17)
+                .rotationEffect(.degrees(34), anchor: .bottom)
+
+            Circle()
+                .fill(Color.red)
+                .frame(width: 11, height: 11)
+        }
+        .padding(6)
+    }
+}
+
+private struct UnknownModuleTypeImage: View {
+    let name: String
+
+    var body: some View {
+        if let image {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+        } else {
+            Image(systemName: "questionmark")
+                .font(.system(size: 34, weight: .bold))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var image: NSImage? {
+        if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "resources") {
+            return NSImage(contentsOf: url)
+        }
+        return Bundle.main.image(forResource: name)
+    }
+}
+
+private struct UnknownDevicePanel<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(24)
+            .background(
+                RoundedRectangle(cornerRadius: 28)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.94))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 28)
+                    .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.14), radius: 20, y: 12)
     }
 }
 

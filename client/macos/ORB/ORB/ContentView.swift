@@ -59,6 +59,22 @@ struct ContentView: View {
                     .transition(.opacity)
                     .zIndex(20)
             }
+
+            if let issue = appModel.localNetworkAccessIssue {
+                LocalNetworkAccessBanner(message: issue)
+                    .environmentObject(appModel)
+                    .padding(.top, 22)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .zIndex(24)
+            }
+
+            if appModel.shouldShowLocalNetworkPrimer {
+                LocalNetworkPrimerOverlay()
+                    .environmentObject(appModel)
+                    .transition(.opacity)
+                    .zIndex(30)
+            }
         }
         .coordinateSpace(name: "overview")
         .frame(minWidth: 760, minHeight: 520)
@@ -67,7 +83,9 @@ struct ContentView: View {
             appModel.attachMainWindow(window)
         })
         .task {
-            appModel.bootstrap()
+            if !appModel.shouldShowLocalNetworkPrimer {
+                appModel.bootstrap()
+            }
             syncDisplayedModuleIDs()
         }
         .onChange(of: appModel.orderedModules.map(\.id)) { _, _ in
@@ -97,7 +115,7 @@ struct ContentView: View {
                 .frame(width: 8, height: 8)
                 .shadow(color: (appModel.connectionStatus == .online ? Color.green : Color.clear).opacity(0.55), radius: 5)
 
-            Text(appModel.connectionStatus == .online ? "已连接" : "未连接")
+            Text(appModel.connectionStatusText)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
 
@@ -117,7 +135,7 @@ struct ContentView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(.ultraThinMaterial, in: Capsule())
-        .help(appModel.localized(appModel.connectionStatus.labelKey))
+        .help(appModel.connectionStatusHelpText)
     }
 
     private func syncDisplayedModuleIDs() {
@@ -134,6 +152,77 @@ private struct StatusBadgeRefreshButtonStyle: ButtonStyle {
             )
             .scaleEffect(configuration.isPressed ? 0.92 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+private struct LocalNetworkAccessBanner: View {
+    @EnvironmentObject private var appModel: AppModel
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "network.slash")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.red)
+
+            Text(message)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button("打开系统设置") {
+                appModel.openLocalNetworkSettings()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: 620)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct LocalNetworkPrimerOverlay: View {
+    @EnvironmentObject private var appModel: AppModel
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.26)
+                .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    Image(systemName: "network")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(.blue)
+
+                    Text("允许 ORB 访问本地网络")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                }
+
+                Text("ORB 需要在局域网中发现并连接设备你的设备。点击继续后，macOS 会弹出系统授权窗口，请选择“允许”。")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Spacer()
+                    Button("继续") {
+                        appModel.beginLocalNetworkAccessFlow()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+            }
+            .padding(24)
+            .frame(width: 440)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
+        }
     }
 }
 
@@ -163,12 +252,8 @@ private struct NewDeviceMainOverlay: View {
                                 .foregroundStyle(.secondary)
                         )
 
-                    Text("新设备")
+                    Text("发现新设备")
                         .font(.system(size: 14, weight: .bold, design: .rounded))
-
-                    Text(rawAddressLabel(firstUnknownAddress))
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
                 }
                 .padding(16)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
@@ -196,18 +281,16 @@ private struct NewDeviceMainOverlay: View {
             .frame(width: 390, height: 330)
         } else {
             UnknownDeviceRegistrationView(
-                addressLabel: appModel.selectedUnknownAddressLabel,
                 moduleType: $appModel.pendingUnknownModuleType,
                 moduleID: $appModel.pendingUnknownModuleID,
                 validIDs: appModel.validRegistrationIDs(for: selectedUnknownAddress),
-                registrationTargetLabel: appModel.registrationTargetLabel,
                 noticeText: appModel.unknownDeviceNotice,
                 issueText: appModel.unknownDeviceIssue,
                 isRegistering: appModel.isPerformingUnknownDeviceAction,
                 cancelAction: appModel.dismissUnknownDeviceFlow,
                 registerAction: appModel.registerSelectedUnknownDevice
             )
-            .frame(width: 390, height: 430)
+            .frame(width: 390, height: 330)
         }
     }
 

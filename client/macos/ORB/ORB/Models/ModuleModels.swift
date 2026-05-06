@@ -593,6 +593,26 @@ struct ORBHeartbeat: Decodable, Equatable {
     var endpoint: ORBEndpoint {
         ORBEndpoint(host: ip, port: port)
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case protocolVersion
+        case deviceName
+        case firmwareVersion
+        case ip
+        case mac
+        case port
+        case sequence
+        case stateRevision
+        case heartbeatIntervalMs
+        case uptimeMs
+        case registeredCount
+        case presentCount
+        case defaultPort
+        case targetPort
+        case configuredPort
+        case delivery
+    }
 }
 
 struct LayoutSlot: Codable, Identifiable, Equatable {

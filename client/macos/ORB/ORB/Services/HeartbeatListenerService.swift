@@ -164,7 +164,7 @@ final class HeartbeatListenerService {
                         heartbeat.receivedAt = .now
                         self.onHeartbeat?(heartbeat)
                     } catch {
-                        NSLog("ORB 心跳：解码失败，正文=%@", String(decoding: data, as: UTF8.self))
+                        NSLog("ORB 心跳：解码失败，原因=%@，正文=%@", error.localizedDescription, String(decoding: data, as: UTF8.self))
                     }
                 }
             }

@@ -10,6 +10,8 @@ private enum UnknownDeviceFlow {
     case registerAsFinalSlot
 }
 
+private let localNetworkPrimerDefaultsKey = "orb.localNetworkPrimerAccepted"
+
 struct MetricDebugInfo {
     let sampleText: String
     let mappedPercent: Double
@@ -123,11 +125,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var isUploadingFirmware = false
     @Published private(set) var firmwareUploadNotice: String?
     @Published private(set) var firmwareUploadIssue: String?
+    @Published private(set) var shouldShowLocalNetworkPrimer: Bool
     @Published private(set) var locatingChannelKey: String?
     @Published private(set) var pendingCalibrationStartKey: String?
     @Published private(set) var latestHeartbeat: ORBHeartbeat?
     @Published private(set) var heartbeatListenerStatus: HeartbeatListenerStatus = .booting
     @Published private(set) var heartbeatRoutingIssue: String?
+    @Published private(set) var localNetworkAccessIssue: String?
     @Published private(set) var smoothingActionIssue: String?
     @Published private(set) var motionDraftProfiles: DeviceSmoothingProfiles
     @Published private(set) var isApplyingMotionSettings = false
@@ -200,6 +204,7 @@ final class AppModel: ObservableObject {
         self.motionDraftProfiles = initialMotionProfiles
         self.calibrationLUTs = Self.expandedCalibrationLUTs(from: persisted.calibrationLUTs)
         self.appLanguage = persisted.appLanguage
+        self.shouldShowLocalNetworkPrimer = !UserDefaults.standard.bool(forKey: localNetworkPrimerDefaultsKey)
 
         resolvedDiscoveryService.onServicesChanged = { [weak self] services in
             guard let self else { return }
@@ -356,6 +361,14 @@ final class AppModel: ObservableObject {
         return summary
     }
 
+    var connectionStatusText: String {
+        localNetworkAccessIssue == nil ? (connectionStatus == .online ? "已连接" : "未连接") : "本地网络被禁止"
+    }
+
+    var connectionStatusHelpText: String {
+        localNetworkAccessIssue ?? localized(connectionStatus.labelKey)
+    }
+
     var heartbeatListenerSummary: String {
         switch heartbeatListenerStatus.mode {
         case .preferredUDP:
@@ -447,6 +460,27 @@ final class AppModel: ObservableObject {
         heartbeatService.start()
         startHeartbeatWatchdog()
         discoveryService.start()
+    }
+
+    func beginLocalNetworkAccessFlow() {
+        UserDefaults.standard.set(true, forKey: localNetworkPrimerDefaultsKey)
+        shouldShowLocalNetworkPrimer = false
+        bootstrap()
+    }
+
+    func openLocalNetworkSettings() {
+        let urls = [
+            "x-apple.systempreferences:com.apple.preferences.networkprivacy",
+            "x-apple.systempreferences:com.apple.preference.security?PrivacyLocalNetworkService",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy"
+        ]
+
+        for urlString in urls {
+            if let url = URL(string: urlString), NSWorkspace.shared.open(url) {
+                return
+            }
+        }
     }
 
     func attachMainWindow(_ window: NSWindow?) {
@@ -1697,6 +1731,7 @@ final class AppModel: ObservableObject {
         do {
             let state = try await session.fetchState(from: endpoint)
             await MainActor.run {
+                self.localNetworkAccessIssue = nil
                 self.activeEndpoint = endpoint
                 self.applyLoadedState(state, preserveSelection: preserveSelection)
                 self.requestHeartbeatRoutingSyncIfPossible()
@@ -1704,6 +1739,7 @@ final class AppModel: ObservableObject {
         } catch {
             await MainActor.run {
                 NSLog("ORB App：拉取设备状态失败，原因：%@", error.localizedDescription)
+                self.noteNetworkAccessFailure(error)
                 self.autoConnectName = nil
                 self.updateConnectionStatus()
             }
@@ -1713,6 +1749,7 @@ final class AppModel: ObservableObject {
     private func applyLoadedState(_ state: ORBDeviceState, preserveSelection: Bool) {
         NSLog("ORB App：已获取设备状态 %@，IP=%@", state.deviceName, state.ip)
         let shouldKeepSourceSelection = preserveSelection && selectedModuleID == nil && selectedUnknownAddress == nil && !showingMaintenanceScreen
+        activeEndpoint = ORBEndpoint(host: state.ip, port: activeEndpoint?.port ?? 80)
         deviceState = state
         calibrationLUTs = Self.expandedCalibrationLUTs(from: state.calibrationLUTs ?? calibrationLUTs)
         lastDeviceContactAt = .now
@@ -1810,6 +1847,9 @@ final class AppModel: ObservableObject {
                 if let transmission {
                     do {
                         try await self.session.sendOutputs(transmission.1, endpoint: transmission.0)
+                        await MainActor.run {
+                            self.noteDeviceContact(endpoint: transmission.0)
+                        }
                     } catch {
                         await MainActor.run {
                             NSLog("ORB App：发送输出帧失败，原因：%@", error.localizedDescription)
@@ -2399,12 +2439,24 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             do {
                 try await self.session.sendOutputs(transmission.1, endpoint: transmission.0)
+                await MainActor.run {
+                    self.noteDeviceContact(endpoint: transmission.0)
+                }
             } catch {
                 await MainActor.run {
                     NSLog("ORB App：恢复实时输出失败，原因：%@", error.localizedDescription)
                 }
             }
         }
+    }
+
+    private func noteDeviceContact(endpoint: ORBEndpoint? = nil) {
+        if let endpoint {
+            activeEndpoint = endpoint
+        }
+        localNetworkAccessIssue = nil
+        lastDeviceContactAt = .now
+        updateConnectionStatus()
     }
 
     private func startHeartbeatWatchdog() {
@@ -2682,6 +2734,7 @@ final class AppModel: ObservableObject {
         do {
             let ping = try await session.ping(endpoint: endpoint)
             await MainActor.run {
+                self.localNetworkAccessIssue = nil
                 self.activeEndpoint = endpoint
                 self.lastDeviceContactAt = .now
                 self.applyHeartbeatRoute(
@@ -2704,9 +2757,30 @@ final class AppModel: ObservableObject {
         } catch {
             await MainActor.run {
                 NSLog("ORB App：HTTP 探活失败，原因：%@", error.localizedDescription)
+                self.noteNetworkAccessFailure(error)
                 self.updateConnectionStatus()
             }
         }
+    }
+
+    private func noteNetworkAccessFailure(_ error: any Error) {
+        guard Self.isLocalNetworkProhibited(error) else { return }
+        localNetworkAccessIssue = "macOS 已禁止 ORB 访问本地网络。请在“系统设置 > 隐私与安全性 > 本地网络”里允许 ORB。"
+    }
+
+    private static func isLocalNetworkProhibited(_ error: any Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain,
+           nsError.code == URLError.notConnectedToInternet.rawValue,
+           String(describing: nsError.userInfo).contains("Local network prohibited") {
+            return true
+        }
+
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isLocalNetworkProhibited(underlying)
+        }
+
+        return false
     }
 
     private static func expandedCalibrationLUTs(from stored: [CalibrationLUT]) -> [CalibrationLUT] {
