@@ -43,8 +43,8 @@ struct ORBPingResponse: Decodable {
     var ip: String
     var mac: String?
     var port: Int
-    var stateRevision: Int
-    var heartbeatIntervalMs: Int
+    var stateRevision: Int?
+    var heartbeatIntervalMs: Int?
     var heartbeatDefaultPort: Int?
     var heartbeatTargetPort: Int?
     var heartbeatConfiguredPort: Bool?

@@ -491,6 +491,83 @@ struct ORBDeviceState: Codable, Equatable {
     var registeredModules: [RegistryEntry] {
         modules.filter(\.registered)
     }
+
+    init(
+        deviceName: String,
+        firmwareVersion: String,
+        ip: String,
+        mac: String?,
+        modules: [RegistryEntry],
+        detectedI2CAddresses: [Int]?,
+        unknownI2CAddresses: [Int]?,
+        unknownCandidatePresent: Bool,
+        calibrationLUTs: [CalibrationLUT]?,
+        smoothing: DeviceSmoothingProfiles,
+        stateRevision: Int?,
+        heartbeatIntervalMs: Int?,
+        heartbeatDefaultPort: Int?,
+        heartbeatTargetPort: Int?,
+        heartbeatConfiguredPort: Bool?,
+        heartbeatDelivery: String?
+    ) {
+        self.deviceName = deviceName
+        self.firmwareVersion = firmwareVersion
+        self.ip = ip
+        self.mac = mac
+        self.modules = modules
+        self.detectedI2CAddresses = detectedI2CAddresses
+        self.unknownI2CAddresses = unknownI2CAddresses
+        self.unknownCandidatePresent = unknownCandidatePresent
+        self.calibrationLUTs = calibrationLUTs
+        self.smoothing = smoothing
+        self.stateRevision = stateRevision
+        self.heartbeatIntervalMs = heartbeatIntervalMs
+        self.heartbeatDefaultPort = heartbeatDefaultPort
+        self.heartbeatTargetPort = heartbeatTargetPort
+        self.heartbeatConfiguredPort = heartbeatConfiguredPort
+        self.heartbeatDelivery = heartbeatDelivery
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        deviceName = try container.decode(String.self, forKey: .deviceName)
+        firmwareVersion = try container.decode(String.self, forKey: .firmwareVersion)
+        ip = try container.decode(String.self, forKey: .ip)
+        mac = try container.decodeIfPresent(String.self, forKey: .mac)
+        modules = try container.decode([RegistryEntry].self, forKey: .modules)
+        detectedI2CAddresses = try container.decodeIfPresent([Int].self, forKey: .detectedI2CAddresses)
+        unknownI2CAddresses = try container.decodeIfPresent([Int].self, forKey: .unknownI2CAddresses)
+        unknownCandidatePresent = try container.decodeIfPresent(Bool.self, forKey: .unknownCandidatePresent)
+            ?? !(unknownI2CAddresses ?? []).isEmpty
+        calibrationLUTs = try container.decodeIfPresent([CalibrationLUT].self, forKey: .calibrationLUTs)
+        smoothing = try container.decodeIfPresent(DeviceSmoothingProfiles.self, forKey: .smoothing)
+            ?? DeviceSmoothingProfiles()
+        stateRevision = try container.decodeIfPresent(Int.self, forKey: .stateRevision)
+        heartbeatIntervalMs = try container.decodeIfPresent(Int.self, forKey: .heartbeatIntervalMs)
+        heartbeatDefaultPort = try container.decodeIfPresent(Int.self, forKey: .heartbeatDefaultPort)
+        heartbeatTargetPort = try container.decodeIfPresent(Int.self, forKey: .heartbeatTargetPort)
+        heartbeatConfiguredPort = try container.decodeIfPresent(Bool.self, forKey: .heartbeatConfiguredPort)
+        heartbeatDelivery = try container.decodeIfPresent(String.self, forKey: .heartbeatDelivery)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case deviceName
+        case firmwareVersion
+        case ip
+        case mac
+        case modules
+        case detectedI2CAddresses
+        case unknownI2CAddresses
+        case unknownCandidatePresent
+        case calibrationLUTs
+        case smoothing
+        case stateRevision
+        case heartbeatIntervalMs
+        case heartbeatDefaultPort
+        case heartbeatTargetPort
+        case heartbeatConfiguredPort
+        case heartbeatDelivery
+    }
 }
 
 struct ORBHeartbeat: Decodable, Equatable {

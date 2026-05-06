@@ -2604,7 +2604,8 @@ final class AppModel: ObservableObject {
         guard
             heartbeatListenerStatus.isAvailable,
             let listenerPort = heartbeatListenerStatus.localPort,
-            let endpoint = activeEndpoint
+            let endpoint = activeEndpoint,
+            deviceSupportsHeartbeatRouting
         else {
             return
         }
@@ -2639,6 +2640,13 @@ final class AppModel: ObservableObject {
                 }
             }
         }
+    }
+
+    private var deviceSupportsHeartbeatRouting: Bool {
+        deviceState?.heartbeatDefaultPort != nil ||
+            deviceState?.heartbeatTargetPort != nil ||
+            deviceState?.heartbeatConfiguredPort != nil ||
+            deviceState?.heartbeatDelivery != nil
     }
 
     private func nextLivenessProbeEndpoint() -> ORBEndpoint? {
