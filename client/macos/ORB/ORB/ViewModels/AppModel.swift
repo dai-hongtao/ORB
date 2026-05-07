@@ -338,7 +338,7 @@ final class AppModel: ObservableObject {
 
     var sourceIsOnline: Bool {
         guard let lastDeviceContactAt else { return false }
-        return Date().timeIntervalSince(lastDeviceContactAt) <= heartbeatGraceWindow
+        return Date().timeIntervalSince(lastDeviceContactAt) <= offlineGraceWindow
     }
 
     var isHeartbeatFresh: Bool {
@@ -2276,6 +2276,10 @@ final class AppModel: ObservableObject {
     private var heartbeatGraceWindow: TimeInterval {
         let intervalMs = latestHeartbeat?.heartbeatIntervalMs ?? deviceState?.heartbeatIntervalMs ?? 1500
         return max(Double(intervalMs) / 1000.0 * 3.2, 2.5)
+    }
+
+    private var offlineGraceWindow: TimeInterval {
+        heartbeatGraceWindow + max(heartbeatGraceWindow * 0.75, 3.0)
     }
 
     private func orderedCalibrationPoints(
